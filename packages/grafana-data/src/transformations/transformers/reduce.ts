@@ -159,6 +159,11 @@ function reduceSeriesToRows(
         if (t) {
           f.type = t;
         }
+        // reducing text fields yields strings (e.g. "200") that can share a column with numbers;
+        // a numeric column must only hold numbers, otherwise min/max and thresholds break downstream
+        if (f.type === FieldType.number) {
+          f.values = f.values.map((v) => (typeof v === 'string' ? Number(v) : v));
+        }
       }
     }
 

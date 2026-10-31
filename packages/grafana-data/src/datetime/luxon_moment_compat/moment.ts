@@ -752,7 +752,7 @@ class EasyTzZone extends IANAZone {
   }
 }
 
-function normalizeZone(zone: string | Zone): Zone {
+function normalizeZone(zone: string | Zone): string | Zone {
   if (typeof zone !== 'string') {
     return zone;
   }
@@ -760,6 +760,12 @@ function normalizeZone(zone: string | Zone): Zone {
   const name = normalizeZoneName(zone);
   if (name === 'UTC') {
     return FixedOffsetZone.instance(0);
+  }
+
+  // Only IANA zones are backed by easy-tz. Leave everything else (e.g. `default`, `local`,
+  // fixed offsets) to luxon, which resolves those names itself instead of yielding an invalid zone.
+  if (!IANAZone.isValidZone(name)) {
+    return zone;
   }
 
   let normalized = easyTzZoneCache.get(name);
