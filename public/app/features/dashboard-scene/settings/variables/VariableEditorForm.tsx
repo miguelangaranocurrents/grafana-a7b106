@@ -1,7 +1,6 @@
 import { css } from '@emotion/css';
-import { type FormEvent, useCallback, useState } from 'react';
-import { useAsyncFn } from 'react-use';
-import { lastValueFrom } from 'rxjs';
+import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { type Subscription } from 'rxjs';
 
 import { type GrafanaTheme2, type SelectableValue } from '@grafana/data';
 import { selectors } from '@grafana/e2e-selectors';
@@ -72,9 +71,19 @@ export function VariableEditorForm({
   const [nameWarning, setNameWarning] = useState<string>();
   const { name, type, label, description, hide: display } = variable.useState();
   const EditorToRender = isEditableVariableType(type) ? getVariableEditor(type) : undefined;
-  const [runQueryState, onRunQuery] = useAsyncFn(async () => {
-    await lastValueFrom(variable.validateAndUpdate!());
+  const runQuerySub = useRef<Subscription | undefined>(undefined);
+  const [isRunningQuery, setIsRunningQuery] = useState(false);
+  // Editor changes (query, regex, sort, ...) each trigger a run. Only the latest run may apply its options,
+  // otherwise a slower earlier run (e.g. started before the regex was set) would overwrite the newer result.
+  const onRunQuery = useCallback(() => {
+    runQuerySub.current?.unsubscribe();
+    setIsRunningQuery(true);
+    runQuerySub.current = variable.validateAndUpdate!().subscribe({
+      complete: () => setIsRunningQuery(false),
+      error: () => setIsRunningQuery(false),
+    });
   }, [variable]);
+  useEffect(() => () => runQuerySub.current?.unsubscribe(), []);
   const onVariableTypeChange = (option: SelectableValue<EditableVariableType>) => {
     if (option.value) {
       onTypeChange(option.value);
@@ -225,13 +234,13 @@ export function VariableEditorForm({
 
           {isHasVariableOptions && (
             <Button
-              disabled={runQueryState.loading}
+              disabled={isRunningQuery}
               variant="primary"
               fill="outline"
               data-testid={selectors.pages.Dashboard.Settings.Variables.Edit.General.submitButton}
               onClick={onRunQuery}
             >
-              {runQueryState.loading ? (
+              {isRunningQuery ? (
                 <LoadingPlaceholder
                   className={styles.loadingPlaceHolder}
                   text={t('dashboard-scene.variable-editor-form.text-running-query', 'Running query...')}
